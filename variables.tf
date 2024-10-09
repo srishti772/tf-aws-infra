@@ -25,13 +25,6 @@ variable "private_subnets" {
 }
 
 
-
-variable "availability_zones" {
-  description = "Availability zones for subnets"
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b", "us-east-1c"]
-}
-
 variable "vpc_name" {
   description = "Prefix to identify each VPC and its resources"
   type        = string
