@@ -11,20 +11,29 @@ variable "vpc_cidr_block" {
   default     = "10.0.0.0/16"
 }
 
-variable "public_subnets_cidr_block" {
-  description = "Public subnet CIDRs"
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+variable "public_subnets" {
+  description = "# of Public subnet"
+  type        = number
+  default     = 1
 }
 
-variable "private_subnets_cidr_block" {
-  description = "Private subnet CIDRs"
-  type        = list(string)
-  default     = ["10.0.255.0/24", "10.0.254.0/24", "10.0.253.0/24"]
+
+variable "private_subnets" {
+  description = "# of Private subnet"
+  type        = number
+  default     = 1
 }
+
+
 
 variable "availability_zones" {
   description = "Availability zones for subnets"
   type        = list(string)
   default     = ["us-east-1a", "us-east-1b", "us-east-1c"]
+}
+
+variable "vpc_name" {
+  description = "Prefix to identify each VPC and its resources"
+  type        = string
+  default     = "a03"
 }
