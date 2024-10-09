@@ -24,3 +24,14 @@ resource "aws_subnet" "a03_public_subnet" {
     Name = "a03-public-subnet-${count.index}"
   }
 }
+
+resource "aws_subnet" "a03_private_subnet" {
+  count                   = length(var.private_subnets_cidr_block)
+  vpc_id                  = aws_vpc.a03_vpc.id
+  cidr_block              = var.private_subnets_cidr_block[count.index]
+  map_public_ip_on_launch = true
+  availability_zone       = var.availability_zones[count.index]
+  tags = {
+    Name = "a03-private-subnet-${count.index}"
+  }
+}
