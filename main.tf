@@ -38,6 +38,10 @@ resource "aws_subnet" "a03_private_subnet" {
 
 resource "aws_route_table" "a03_public_route_table" {
   vpc_id = aws_vpc.a03_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.a03_gateway.id
+  }
   tags = {
     Name = "a03-public-route-table"
   }
