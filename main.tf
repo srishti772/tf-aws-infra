@@ -6,7 +6,7 @@ resource "aws_vpc" "this" {
   }
 }
 
-#Creating Internet Gateway and attaching to VPC
+#Creating Internet Gateway and attaching to VP
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
 
