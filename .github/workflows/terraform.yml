@@ -1,0 +1,25 @@
+name: CI for Terraform
+
+on:
+  pull_request:
+    branches:
+      - main  # Change this to your default branch if it's different
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 1.9.3  
+
+    - name: Terraform fmt
+      run: terraform fmt -check -recursive
+
+    - name: Terraform validate
+      run: terraform validate
