@@ -17,7 +17,7 @@ resource "aws_internet_gateway" "this" {
 
 #Creating public subnets
 resource "aws_subnet" "public" {
-  count                   = var.public_subnets
+  count= var.public_subnets
   vpc_id                  = aws_vpc.this.id
   cidr_block              = cidrsubnet(var.vpc_cidr_block, 8, count.index)
   map_public_ip_on_launch = true
