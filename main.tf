@@ -70,54 +70,47 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
+
 resource "aws_security_group" "this" {
   vpc_id      = aws_vpc.this.id
-  name        = "${var.vpc_name}-app-sg"
+  name        = "application security group"
   description = "Security group for web application EC2 instances"
 
   tags = {
-    Name = "${var.vpc_name}-app-sg"
+    Name = "application security group"
   }
-}
 
-# SSH rule for port 22
-resource "aws_security_group_rule" "ssh" {
-  type              = "ingress"
-  from_port         = 22
-  to_port           = 22
-  protocol          = "tcp"
-  security_group_id = aws_security_group.this.id
-  cidr_blocks       = var.incoming_traffic
-}
+  # SSH rule for port 22
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
 
-# HTTP rule for port 80
-resource "aws_security_group_rule" "http" {
-  type              = "ingress"
-  from_port         = 80
-  to_port           = 80
-  protocol          = "tcp"
-  security_group_id = aws_security_group.this.id
-  cidr_blocks       = var.incoming_traffic
-}
+  # HTTP rule for port 80
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
 
-# HTTPS rule for port 443
-resource "aws_security_group_rule" "https" {
-  type              = "ingress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  security_group_id = aws_security_group.this.id
-  cidr_blocks       = var.incoming_traffic
-}
+  # HTTPS rule for port 443
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
 
-# Custom application rule for port 3000
-resource "aws_security_group_rule" "webapp" {
-  type              = "ingress"
-  from_port         = var.application_port
-  to_port           = var.application_port
-  protocol          = "tcp"
-  security_group_id = aws_security_group.this.id
-  cidr_blocks       = var.incoming_traffic
+  # Node js rule 
+  ingress {
+    from_port   = var.application_port
+    to_port     = var.application_port
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
 }
 
 resource "aws_key_pair" "ec2" {
