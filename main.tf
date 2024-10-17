@@ -139,3 +139,17 @@ resource "aws_instance" "ec2" {
     Name = "${var.ec2_name}-instance"
   }
 }
+
+
+
+#Output
+
+output "ec2_public_ip" {
+  description = "The public IP address of the EC2 instance"
+  value       = aws_instance.ec2.public_ip
+}
+
+output "ssh_command" {
+  description = "SSH command to connect to the EC2 instance and check webapp service status"
+  value       = "ssh -i \"${var.public_key_path}\" ubuntu@${aws_instance.ec2.public_ip} && sudo systemctl status webapp.service"
+}
