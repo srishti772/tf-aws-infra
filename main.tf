@@ -137,22 +137,18 @@ resource "aws_instance" "ec2" {
   disable_api_termination     = false
   depends_on                  = [aws_db_instance.this]
   user_data                   = <<-EOF
-              #!/bin/bash
-              exec > /var/log/user-data.log 2>&1
-              echo "Starting user data script" 
-              sudo -u csye6225 bash <<'EOL'
-              cd /opt/csye6225/webapp
-              echo "Creating .env file"
-              touch .env
-              echo "PORT=${var.application_port}" >> .env
-              echo "MYSQL_USER=${var.RDS_username}" >> .env
-              echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
-              echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
-              echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
-              echo "MYSQL_DATABASE_TEST=test_db" >> .env
-              echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
-              EOL
-              echo "User data script finished"
+#!/bin/bash
+sudo -u csye6225 bash <<'EOL'
+cd /opt/csye6225/webapp
+touch .env
+echo "PORT=${var.application_port}" >> .env
+echo "MYSQL_USER=${var.RDS_username}" >> .env
+echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
+echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
+echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
+echo "MYSQL_DATABASE_TEST=test_db" >> .env
+echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
+EOL
 EOF
 
 
