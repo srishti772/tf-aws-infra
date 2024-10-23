@@ -137,8 +137,6 @@ resource "aws_instance" "ec2" {
   disable_api_termination     = false
   depends_on                  = [aws_db_instance.this]
   user_data                   = <<-EOF
-              #!/bin/bash
-              # Execute the following commands as csye6225 user
               sudo -u csye6225 bash <<'EOL'
               ENV_FILE="/opt/csye6225/webapp/.env"
               # Create the .env file
@@ -152,12 +150,6 @@ resource "aws_instance" "ec2" {
               MYSQL_DATABASE_TEST="test_db"
               MYSQL_DATABASE_PROD=${var.RDS_db_name}
               EOL
-
-              # Verify the .env file contents
-              echo "========================================"
-              echo "Verifying .env file contents:"
-              echo "========================================"
-              cat "$ENV_FILE"
               EOL
 EOF
 
