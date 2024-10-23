@@ -144,8 +144,8 @@ resource "aws_instance" "ec2" {
               PORT=${var.application_port}
               MYSQL_USER=${var.RDS_username}
               MYSQL_PASSWORD=${var.RDS_password}
-              MYSQL_HOST=${aws_db_instance.this.endpoint}
-              MYSQL_PORT=3306
+              MYSQL_HOST=${aws_db_instance.this.address}
+              MYSQL_PORT=${aws_db_instance.this.port}
               MYSQL_DATABASE_TEST="test_db"
               MYSQL_DATABASE_PROD=${var.RDS_db_name}
               EOL
