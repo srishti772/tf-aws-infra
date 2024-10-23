@@ -84,3 +84,66 @@ variable "root_volume_delete_on_termination" {
   type        = bool
   default     = true
 }
+
+
+variable "PG_mysql_version" {
+  description = "mysql parameter type version"
+  type        = string
+  default     = "mysql8.0"
+}
+
+
+variable "RDS_storage_type" {
+  description = "RDS storage type"
+  type        = string
+  default     = "gp3"
+}
+
+
+variable "RDS_allocated_storage" {
+  description = "The amount of storage (in GB) to allocate for the DB instance."
+  type        = number
+  default     = 20
+}
+
+variable "RDS_engine" {
+  description = "The database engine to use."
+  type        = string
+  default     = "mysql"
+}
+
+variable "RDS_engine_version" {
+  description = "The version of the database engine to use."
+  type        = string
+  default     = "8.0.39"
+}
+
+variable "RDS_instance_class" {
+  description = "The compute and memory capacity of the DB instance."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "RDS_db_name" {
+  description = "The name of the database to create."
+  type        = string
+  default     = "csye6225"
+}
+
+variable "RDS_username" {
+  description = "The username for the master DB user."
+  type        = string
+  default     = "csye6225"
+}
+
+variable "RDS_password" {
+  description = "The password for the master DB user."
+  type        = string
+  default     = "password"
+}
+
+variable "RDS_identifier" {
+  description = "The identifier for the DB instance."
+  type        = string
+  default     = "csye6225"
+}
