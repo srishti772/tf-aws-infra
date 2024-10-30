@@ -136,6 +136,7 @@ resource "aws_instance" "ec2" {
   key_name                    = aws_key_pair.ec2.key_name
   disable_api_termination     = false
   depends_on                  = [aws_db_instance.this]
+  iam_instance_profile        = aws_iam_instance_profile.instance_profile.name
   user_data                   = <<-EOF
 #!/bin/bash
 sudo -u csye6225 bash <<'EOL'
@@ -148,7 +149,14 @@ echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
 echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
 echo "MYSQL_DATABASE_TEST=test_db" >> .env
 echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
+echo "STATSD_CLIENT=127.0.0.1" >> .env
 EOL
+
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+-a fetch-config \
+-m ec2 \
+-c file:/opt/cloudwatch-config.json \
+-s
 EOF
 
 
@@ -241,3 +249,40 @@ output "db_host" {
   value       = "${aws_db_instance.this.endpoint} "
 }
 
+
+
+# Define the IAM Policy Document for the EC2 instance role
+
+
+data "aws_iam_policy_document" "assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+
+# Create the IAM Role
+resource "aws_iam_role" "instance" {
+  name               = "instance_role"
+  path               = "/system/"
+  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+}
+
+# Attach the CloudWatchAgentServerPolicy to the IAM Role
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.instance.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+
+resource "aws_iam_instance_profile" "instance_profile" {
+  name = "instance_profile"
+  role = aws_iam_role.instance.name
+}
