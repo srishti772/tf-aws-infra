@@ -136,7 +136,7 @@ resource "aws_instance" "ec2" {
   key_name                    = aws_key_pair.ec2.key_name
   disable_api_termination     = false
   depends_on                  = [aws_db_instance.this]
-  iam_instance_profile        = aws_iam_instance_profile.instance_profile.name
+  iam_instance_profile        = aws_iam_instance_profile.ec2.name
   user_data                   = <<-EOF
 #!/bin/bash
 sudo -u csye6225 bash <<'EOL'
@@ -251,38 +251,74 @@ output "db_host" {
 
 
 
-# Define the IAM Policy Document for the EC2 instance role
 
 
-data "aws_iam_policy_document" "assume_role" {
-  statement {
-    effect = "Allow"
+resource "aws_iam_role" "ec2" {
+  name               = "ec2"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
 
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
 
-    actions = ["sts:AssumeRole"]
+resource "aws_iam_policy" "s3Bucket_policy" {
+  name        = "S3BucketAccessPolicy"
+  description = "Policy for read, write, and delete access to the S3 bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${aws_s3_bucket.this.arn}/*" 
+      }
+    ]
+  })
+}
+
+
+# Attach the CloudWatchAgentServerPolicy to the IAM role for EC2
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+# Attach Custom S3 policy to s3Bucket IAM role for EC2
+
+resource "aws_iam_role_policy_attachment" "s3Bucket_policy" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = aws_iam_policy.s3Bucket_policy.arn
+}
+#Instance Profile to attach to EC2
+resource "aws_iam_instance_profile" "ec2" {
+  name = "ec2"
+  role = aws_iam_role.ec2.name
+}
+
+
+
+
+resource "aws_s3_bucket" "this" {
+   bucket = "${uuid()}" 
+  force_destroy = true
+  tags = {
+    Name        = "My bucket"
+    Environment = "Dev"
   }
 }
 
 
-# Create the IAM Role
-resource "aws_iam_role" "instance" {
-  name               = "instance_role"
-  path               = "/system/"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
-}
-
-# Attach the CloudWatchAgentServerPolicy to the IAM Role
-resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
-  role       = aws_iam_role.instance.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
 
 
-resource "aws_iam_instance_profile" "instance_profile" {
-  name = "instance_profile"
-  role = aws_iam_role.instance.name
-}
+
