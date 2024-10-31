@@ -139,11 +139,16 @@ variable "RDS_username" {
 variable "RDS_password" {
   description = "The password for the master DB user."
   type        = string
-  default     = "password"
 }
 
 variable "RDS_identifier" {
   description = "The identifier for the DB instance."
   type        = string
   default     = "csye6225"
+}
+
+
+variable "subdomain_name" {
+  type    = string
+  default = "dev.srishti-ahirwar.me"
 }
