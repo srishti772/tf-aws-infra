@@ -150,13 +150,21 @@ echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
 echo "MYSQL_DATABASE_TEST=test_db" >> .env
 echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
 echo "STATSD_CLIENT=127.0.0.1" >> .env
+echo "STATSD_PORT=8125" >> .env
+echo "BUCKET_NAME=${aws_s3_bucket.this.bucket}" >> .env
+echo "BUCKET_REGION=${var.aws_region}" >> .env
 EOL
+sudo systemctl daemon-reload
+sudo systemctl restart webapp
 
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
 -a fetch-config \
 -m ec2 \
 -c file:/opt/csye6225/webapp/cloudwatch-config.json \
 -s
+sudo systemctl restart amazon-cloudwatch-agent
+
+
 EOF
 
 
@@ -254,7 +262,7 @@ output "db_host" {
 
 
 resource "aws_iam_role" "ec2" {
-  name               = "ec2"
+  name = "ec2"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -282,7 +290,7 @@ resource "aws_iam_policy" "s3Bucket_policy" {
           "s3:PutObject",
           "s3:DeleteObject"
         ]
-        Resource = "${aws_s3_bucket.this.arn}/*" 
+        Resource = "${aws_s3_bucket.this.arn}/*"
       }
     ]
   })
@@ -310,14 +318,45 @@ resource "aws_iam_instance_profile" "ec2" {
 
 
 resource "aws_s3_bucket" "this" {
-   bucket = "${uuid()}" 
+  bucket        = uuid()
   force_destroy = true
-  tags = {
-    Name        = "My bucket"
-    Environment = "Dev"
+
+}
+
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
+  bucket = aws_s3_bucket.this.bucket
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "example" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    id = "TransitionToStandardIA"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    status = "Enabled"
+  }
+}
+
+
+resource "aws_route53_record" "demo_a_record" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = var.subdomain_name
+  type    = "A"
+  ttl     = 60
+  records = [aws_instance.ec2.public_ip]
+}
 
 
 
