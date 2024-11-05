@@ -82,9 +82,9 @@ resource "aws_security_group" "app_sg" {
 
   # SSH rule for port 22
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
     security_groups = [aws_security_group.lb_sg.id]
   }
 
@@ -92,9 +92,9 @@ resource "aws_security_group" "app_sg" {
 
   # Node js rule 
   ingress {
-    from_port   = var.application_port
-    to_port     = var.application_port
-    protocol    = "tcp"
+    from_port       = var.application_port
+    to_port         = var.application_port
+    protocol        = "tcp"
     security_groups = [aws_security_group.lb_sg.id]
   }
 
@@ -335,21 +335,21 @@ resource "aws_security_group" "lb_sg" {
 
   # HTTP
   ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = var.incoming_traffic
   }
 
-# HTTPS
+  # HTTPS
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = var.incoming_traffic
   }
 
-egress {
+  egress {
     from_port   = 0
     to_port     = 0
     protocol    = -1
@@ -369,10 +369,10 @@ resource "aws_launch_template" "app" {
   key_name = aws_key_pair.ec2.key_name
 
 
- network_interfaces {
+  network_interfaces {
     associate_public_ip_address = true
   }
-  
+
   # User Data
   user_data = <<-EOF
     #!/bin/bash
@@ -404,7 +404,7 @@ resource "aws_launch_template" "app" {
 
   # Block device mapping
   block_device_mappings {
-    device_name           = "/dev/xvda"
+    device_name = "/dev/xvda"
     ebs {
       volume_size           = var.root_volume_size
       volume_type           = var.root_volume_type
@@ -412,15 +412,15 @@ resource "aws_launch_template" "app" {
     }
   }
 
-iam_instance_profile {
+  iam_instance_profile {
     name = aws_iam_instance_profile.ec2.name
   }
 
-    vpc_security_group_ids = [aws_security_group.app_sg.id]
+  vpc_security_group_ids  = [aws_security_group.app_sg.id]
   disable_api_termination = true
 
 
-   tag_specifications {
+  tag_specifications {
     resource_type = "instance"
     tags = {
       Name = "${var.ec2_name}-launch-template"
