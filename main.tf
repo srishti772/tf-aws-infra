@@ -85,31 +85,17 @@ resource "aws_security_group" "app_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    security_groups = [aws_security_group.lb_sg.id]
   }
 
-  # HTTP rule for port 80
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
-  }
 
-  # HTTPS rule for port 443
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
-  }
 
   # Node js rule 
   ingress {
     from_port   = var.application_port
     to_port     = var.application_port
     protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    security_groups = [aws_security_group.lb_sg.id]
   }
 
   egress {
@@ -238,29 +224,6 @@ resource "aws_db_instance" "this" {
 }
 
 
-
-#Output
-
-output "ec2_public_ip" {
-  description = "The public IP address of the EC2 instance"
-  value       = aws_instance.ec2.public_ip
-}
-
-output "ssh_command" {
-  description = "SSH command to connect to the EC2 instance and check webapp service status"
-  value       = "ssh -i ${var.public_key_path} ubuntu@${aws_instance.ec2.public_ip} && sudo systemctl status webapp.service && sudo node /opt/csye6225/webapp/server.js"
-}
-
-
-output "db_host" {
-  description = "DB host"
-  value       = "${aws_db_instance.this.endpoint} "
-}
-
-
-
-
-
 resource "aws_iam_role" "ec2" {
   name = "ec2"
   assume_role_policy = jsonencode({
@@ -334,7 +297,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "example" {
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
   rule {
@@ -350,7 +313,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "example" {
 }
 
 
-resource "aws_route53_record" "demo_a_record" {
+resource "aws_route53_record" "this" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = var.subdomain_name
   type    = "A"
@@ -359,5 +322,129 @@ resource "aws_route53_record" "demo_a_record" {
 }
 
 
+
+
+resource "aws_security_group" "lb_sg" {
+  vpc_id      = aws_vpc.this.id
+  name        = "load balancer security group"
+  description = "Security group for load balancer"
+
+  tags = {
+    Name = "load balancer security group"
+  }
+
+  # HTTP
+  ingress {
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
+
+# HTTPS
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
+
+egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = -1
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+
+
+# Creating a Launch Template
+resource "aws_launch_template" "app" {
+  name_prefix   = "${var.ec2_name}-launch-template-"
+  image_id      = var.golden_ami_id
+  instance_type = var.instance_type
+
+  key_name = aws_key_pair.ec2.key_name
+
+
+ network_interfaces {
+    associate_public_ip_address = true
+  }
+  
+  # User Data
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo -u csye6225 bash <<'EOL'
+    cd /opt/csye6225/webapp
+    touch .env
+    echo "PORT=${var.application_port}" >> .env
+    echo "MYSQL_USER=${var.RDS_username}" >> .env
+    echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
+    echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
+    echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
+    echo "MYSQL_DATABASE_TEST=test_db" >> .env
+    echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
+    echo "STATSD_CLIENT=127.0.0.1" >> .env
+    echo "STATSD_PORT=8125" >> .env
+    echo "BUCKET_NAME=${aws_s3_bucket.this.bucket}" >> .env
+    echo "BUCKET_REGION=${var.aws_region}" >> .env
+    EOL
+    sudo systemctl daemon-reload
+    sudo systemctl restart webapp
+
+    sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config \
+    -m ec2 \
+    -c file:/opt/csye6225/webapp/cloudwatch-config.json \
+    -s
+    sudo systemctl restart amazon-cloudwatch-agent
+  EOF
+
+  # Block device mapping
+  block_device_mappings {
+    device_name           = "/dev/xvda"
+    ebs {
+      volume_size           = var.root_volume_size
+      volume_type           = var.root_volume_type
+      delete_on_termination = var.root_volume_delete_on_termination
+    }
+  }
+
+iam_instance_profile {
+    name = aws_iam_instance_profile.ec2.name
+  }
+
+    vpc_security_group_ids = [aws_security_group.app_sg.id]
+  disable_api_termination = true
+
+
+   tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "${var.ec2_name}-launch-template"
+    }
+  }
+}
+
+
+#Output
+
+output "ec2_public_ip" {
+  description = "The public IP address of the EC2 instance"
+  value       = aws_instance.ec2.public_ip
+}
+
+output "ssh_command" {
+  description = "SSH command to connect to the EC2 instance and check webapp service status"
+  value       = "ssh -i ${var.public_key_path} ubuntu@${aws_instance.ec2.public_ip} && sudo systemctl status webapp.service && sudo node /opt/csye6225/webapp/server.js"
+}
+
+
+output "db_host" {
+  description = "DB host"
+  value       = "${aws_db_instance.this.endpoint} "
+}
 
 
