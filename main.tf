@@ -112,61 +112,6 @@ resource "aws_key_pair" "ec2" {
   public_key = file(var.public_key_path)
 }
 
-# Creating EC2 Instance
-resource "aws_instance" "ec2" {
-  ami                         = var.golden_ami_id
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public[0].id
-  associate_public_ip_address = true
-  vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  key_name                    = aws_key_pair.ec2.key_name
-  disable_api_termination     = false
-  depends_on                  = [aws_db_instance.this]
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
-  user_data                   = <<-EOF
-#!/bin/bash
-sudo -u csye6225 bash <<'EOL'
-cd /opt/csye6225/webapp
-touch .env
-echo "PORT=${var.application_port}" >> .env
-echo "MYSQL_USER=${var.RDS_username}" >> .env
-echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
-echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
-echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
-echo "MYSQL_DATABASE_TEST=test_db" >> .env
-echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
-echo "STATSD_CLIENT=127.0.0.1" >> .env
-echo "STATSD_PORT=8125" >> .env
-echo "BUCKET_NAME=${aws_s3_bucket.this.bucket}" >> .env
-echo "BUCKET_REGION=${var.aws_region}" >> .env
-EOL
-sudo systemctl daemon-reload
-sudo systemctl restart webapp
-
-sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
--a fetch-config \
--m ec2 \
--c file:/opt/csye6225/webapp/cloudwatch-config.json \
--s
-sudo systemctl restart amazon-cloudwatch-agent
-
-
-EOF
-
-
-  root_block_device {
-    volume_size           = var.root_volume_size
-    volume_type           = var.root_volume_type
-    delete_on_termination = var.root_volume_delete_on_termination
-
-  }
-
-  tags = {
-    Name = "${var.ec2_name}-instance"
-  }
-}
-
-
 
 resource "aws_db_parameter_group" "mysql_param_group" {
   name        = "mysql-parameter-group"
@@ -317,8 +262,11 @@ resource "aws_route53_record" "this" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = var.subdomain_name
   type    = "A"
-  ttl     = 60
-  records = [aws_instance.ec2.public_ip]
+  alias {
+    name                   = aws_lb.this.dns_name
+    zone_id                = aws_lb.this.zone_id
+    evaluate_target_health = true
+  }
 }
 
 
@@ -361,8 +309,8 @@ resource "aws_security_group" "lb_sg" {
 
 
 # Creating a Launch Template
-resource "aws_launch_template" "app" {
-  name_prefix   = "${var.ec2_name}-launch-template-"
+resource "aws_launch_template" "this" {
+  name          = "csye6225-launchtemplate"
   image_id      = var.golden_ami_id
   instance_type = var.instance_type
 
@@ -371,40 +319,22 @@ resource "aws_launch_template" "app" {
 
   network_interfaces {
     associate_public_ip_address = true
+    security_groups             = [aws_security_group.app_sg.id]
+
   }
 
-  # User Data
-  user_data = <<-EOF
-    #!/bin/bash
-    sudo -u csye6225 bash <<'EOL'
-    cd /opt/csye6225/webapp
-    touch .env
-    echo "PORT=${var.application_port}" >> .env
-    echo "MYSQL_USER=${var.RDS_username}" >> .env
-    echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
-    echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
-    echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
-    echo "MYSQL_DATABASE_TEST=test_db" >> .env
-    echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
-    echo "STATSD_CLIENT=127.0.0.1" >> .env
-    echo "STATSD_PORT=8125" >> .env
-    echo "BUCKET_NAME=${aws_s3_bucket.this.bucket}" >> .env
-    echo "BUCKET_REGION=${var.aws_region}" >> .env
-    EOL
-    sudo systemctl daemon-reload
-    sudo systemctl restart webapp
-
-    sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-    -a fetch-config \
-    -m ec2 \
-    -c file:/opt/csye6225/webapp/cloudwatch-config.json \
-    -s
-    sudo systemctl restart amazon-cloudwatch-agent
-  EOF
-
-  # Block device mapping
+  user_data = base64encode(templatefile("./user_data.tpl", {
+    application_port = var.application_port,
+    RDS_username     = var.RDS_username,
+    RDS_password     = var.RDS_password,
+    db_host          = aws_db_instance.this.address,
+    db_port          = aws_db_instance.this.port,
+    RDS_db_name      = var.RDS_db_name,
+    bucket_name      = aws_s3_bucket.this.bucket,
+    aws_region       = var.aws_region
+  }))
   block_device_mappings {
-    device_name = "/dev/xvda"
+    device_name = "/dev/sdf"
     ebs {
       volume_size           = var.root_volume_size
       volume_type           = var.root_volume_type
@@ -416,7 +346,6 @@ resource "aws_launch_template" "app" {
     name = aws_iam_instance_profile.ec2.name
   }
 
-  vpc_security_group_ids  = [aws_security_group.app_sg.id]
   disable_api_termination = true
 
 
@@ -429,22 +358,128 @@ resource "aws_launch_template" "app" {
 }
 
 
-#Output
 
-output "ec2_public_ip" {
-  description = "The public IP address of the EC2 instance"
-  value       = aws_instance.ec2.public_ip
+
+# Auto Scaling Group Definition
+resource "aws_autoscaling_group" "this" {
+  name = "csye6225-asg"
+
+  launch_template {
+    id      = aws_launch_template.this.id
+    version = "$Latest"
+  }
+
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  default_cooldown    = var.cooldown
+  vpc_zone_identifier = aws_subnet.public[*].id
+  force_delete        = true
+  # Auto Scaling Group Tags
+  tag {
+
+    key                 = "Name"
+    value               = "csye6225_asg"
+    propagate_at_launch = true
+
+
+  }
+  target_group_arns = [aws_lb_target_group.this.arn]
+
 }
 
-output "ssh_command" {
-  description = "SSH command to connect to the EC2 instance and check webapp service status"
-  value       = "ssh -i ${var.public_key_path} ubuntu@${aws_instance.ec2.public_ip} && sudo systemctl status webapp.service && sudo node /opt/csye6225/webapp/server.js"
+
+resource "aws_autoscaling_policy" "scale_up_policy" {
+  name                   = "scaleUpPolicy"
+  autoscaling_group_name = aws_autoscaling_group.this.name
+  scaling_adjustment     = 1
+  cooldown               = var.cooldown
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+}
+
+resource "aws_autoscaling_policy" "scale_down_policy" {
+  name                   = "scaleDownPolicy"
+  autoscaling_group_name = aws_autoscaling_group.this.name
+  scaling_adjustment     = -1
+  cooldown               = var.cooldown
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+
 }
 
 
-output "db_host" {
-  description = "DB host"
-  value       = "${aws_db_instance.this.endpoint} "
+# CloudWatch Metric Alarm - CPU Utilization (Scale Up)
+resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
+  alarm_name          = "scale_up_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 5
+  alarm_actions       = [aws_autoscaling_policy.scale_up_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.this.name
+  }
 }
 
+# CloudWatch Metric Alarm - CPU Utilization (Scale Down)
+resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
+  alarm_name          = "scale_down_alarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 3
+  alarm_actions       = [aws_autoscaling_policy.scale_down_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.this.name
+  }
+}
+
+resource "aws_lb" "this" {
+  name               = "csye6225-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.lb_sg.id]
+  subnets            = aws_subnet.public[*].id
+  enable_http2       = true
+
+  tags = {
+    Application = "webapp"
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this.arn
+
+
+  }
+}
+
+resource "aws_lb_target_group" "this" {
+  name        = "app-target-group"
+  port        = var.application_port
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.this.id
+  target_type = "instance"
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 10
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
 
