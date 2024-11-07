@@ -308,7 +308,7 @@ resource "aws_security_group" "lb_sg" {
 
 
 
-# Creating a Launch Template
+# Creating a Launch Template for Autoscaling
 resource "aws_launch_template" "this" {
   name          = "csye6225-launchtemplate"
   image_id      = var.golden_ami_id
@@ -385,6 +385,8 @@ resource "aws_autoscaling_group" "this" {
 
   }
   target_group_arns = [aws_lb_target_group.this.arn]
+  depends_on        = [aws_db_instance.this]
+
 
 }
 
@@ -398,6 +400,23 @@ resource "aws_autoscaling_policy" "scale_up_policy" {
   policy_type            = "SimpleScaling"
 }
 
+# CloudWatch Metric Alarm - CPU Utilization (Scale Up)
+resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
+  alarm_name          = "scale_up_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = var.scale_up_threshold
+
+  alarm_actions = [aws_autoscaling_policy.scale_up_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.this.name
+  }
+}
+
 resource "aws_autoscaling_policy" "scale_down_policy" {
   name                   = "scaleDownPolicy"
   autoscaling_group_name = aws_autoscaling_group.this.name
@@ -409,22 +428,6 @@ resource "aws_autoscaling_policy" "scale_down_policy" {
 }
 
 
-# CloudWatch Metric Alarm - CPU Utilization (Scale Up)
-resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
-  alarm_name          = "scale_up_alarm"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/EC2"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 5
-  alarm_actions       = [aws_autoscaling_policy.scale_up_policy.arn]
-  dimensions = {
-    AutoScalingGroupName = aws_autoscaling_group.this.name
-  }
-}
-
 # CloudWatch Metric Alarm - CPU Utilization (Scale Down)
 resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
   alarm_name          = "scale_down_alarm"
@@ -434,8 +437,10 @@ resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
   namespace           = "AWS/EC2"
   period              = 60
   statistic           = "Average"
-  threshold           = 3
-  alarm_actions       = [aws_autoscaling_policy.scale_down_policy.arn]
+  threshold           = var.scale_down_threshold
+
+  alarm_actions = [aws_autoscaling_policy.scale_down_policy.arn]
+
   dimensions = {
     AutoScalingGroupName = aws_autoscaling_group.this.name
   }

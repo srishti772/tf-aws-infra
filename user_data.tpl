@@ -16,7 +16,7 @@
   EOL
   sudo systemctl daemon-reload
   sudo systemctl restart webapp
-  echo "B"
+
 
   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config \

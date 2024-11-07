@@ -182,3 +182,13 @@ variable "user_data_script" {
   default = "./user_data.tpl"
 
 }
+
+variable "scale_up_threshold" {
+  type = number
+  default = 5
+}
+
+variable "scale_down_threshold" {
+  type = number
+  default = 3
+}
