@@ -152,3 +152,43 @@ variable "subdomain_name" {
   type    = string
   default = "dev.srishti-ahirwar.me"
 }
+
+# Required variables for the ASG
+variable "asg_min_size" {
+  type    = number
+  default = 1
+}
+
+variable "asg_max_size" {
+  type = number
+
+  default = 1
+}
+
+variable "asg_desired_capacity" {
+  type = number
+
+  default = 1
+}
+
+variable "cooldown" {
+  type = number
+
+  default = 60
+}
+
+variable "user_data_script" {
+  type    = string
+  default = "./user_data.tpl"
+
+}
+
+variable "scale_up_threshold" {
+  type    = number
+  default = 5
+}
+
+variable "scale_down_threshold" {
+  type    = number
+  default = 3
+}

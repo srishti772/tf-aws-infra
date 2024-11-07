@@ -82,34 +82,20 @@ resource "aws_security_group" "app_sg" {
 
   # SSH rule for port 22
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb_sg.id]
   }
 
-  # HTTP rule for port 80
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
-  }
 
-  # HTTPS rule for port 443
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
-  }
 
   # Node js rule 
   ingress {
-    from_port   = var.application_port
-    to_port     = var.application_port
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    from_port       = var.application_port
+    to_port         = var.application_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb_sg.id]
   }
 
   egress {
@@ -125,61 +111,6 @@ resource "aws_key_pair" "ec2" {
   key_name   = "${var.ec2_name}-key"
   public_key = file(var.public_key_path)
 }
-
-# Creating EC2 Instance
-resource "aws_instance" "ec2" {
-  ami                         = var.golden_ami_id
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public[0].id
-  associate_public_ip_address = true
-  vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  key_name                    = aws_key_pair.ec2.key_name
-  disable_api_termination     = false
-  depends_on                  = [aws_db_instance.this]
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
-  user_data                   = <<-EOF
-#!/bin/bash
-sudo -u csye6225 bash <<'EOL'
-cd /opt/csye6225/webapp
-touch .env
-echo "PORT=${var.application_port}" >> .env
-echo "MYSQL_USER=${var.RDS_username}" >> .env
-echo "MYSQL_PASSWORD=${var.RDS_password}" >> .env
-echo "MYSQL_HOST=${aws_db_instance.this.address}" >> .env
-echo "MYSQL_PORT=${aws_db_instance.this.port}" >> .env
-echo "MYSQL_DATABASE_TEST=test_db" >> .env
-echo "MYSQL_DATABASE_PROD=${var.RDS_db_name}" >> .env
-echo "STATSD_CLIENT=127.0.0.1" >> .env
-echo "STATSD_PORT=8125" >> .env
-echo "BUCKET_NAME=${aws_s3_bucket.this.bucket}" >> .env
-echo "BUCKET_REGION=${var.aws_region}" >> .env
-EOL
-sudo systemctl daemon-reload
-sudo systemctl restart webapp
-
-sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
--a fetch-config \
--m ec2 \
--c file:/opt/csye6225/webapp/cloudwatch-config.json \
--s
-sudo systemctl restart amazon-cloudwatch-agent
-
-
-EOF
-
-
-  root_block_device {
-    volume_size           = var.root_volume_size
-    volume_type           = var.root_volume_type
-    delete_on_termination = var.root_volume_delete_on_termination
-
-  }
-
-  tags = {
-    Name = "${var.ec2_name}-instance"
-  }
-}
-
 
 
 resource "aws_db_parameter_group" "mysql_param_group" {
@@ -236,29 +167,6 @@ resource "aws_db_instance" "this" {
   multi_az               = false
   skip_final_snapshot    = true
 }
-
-
-
-#Output
-
-output "ec2_public_ip" {
-  description = "The public IP address of the EC2 instance"
-  value       = aws_instance.ec2.public_ip
-}
-
-output "ssh_command" {
-  description = "SSH command to connect to the EC2 instance and check webapp service status"
-  value       = "ssh -i ${var.public_key_path} ubuntu@${aws_instance.ec2.public_ip} && sudo systemctl status webapp.service && sudo node /opt/csye6225/webapp/server.js"
-}
-
-
-output "db_host" {
-  description = "DB host"
-  value       = "${aws_db_instance.this.endpoint} "
-}
-
-
-
 
 
 resource "aws_iam_role" "ec2" {
@@ -334,7 +242,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "example" {
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
   rule {
@@ -350,14 +258,233 @@ resource "aws_s3_bucket_lifecycle_configuration" "example" {
 }
 
 
-resource "aws_route53_record" "demo_a_record" {
+resource "aws_route53_record" "this" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = var.subdomain_name
   type    = "A"
-  ttl     = 60
-  records = [aws_instance.ec2.public_ip]
+  alias {
+    name                   = aws_lb.this.dns_name
+    zone_id                = aws_lb.this.zone_id
+    evaluate_target_health = true
+  }
 }
 
 
 
+
+resource "aws_security_group" "lb_sg" {
+  vpc_id      = aws_vpc.this.id
+  name        = "load balancer security group"
+  description = "Security group for load balancer"
+
+  tags = {
+    Name = "load balancer security group"
+  }
+
+  # HTTP
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
+
+  # HTTPS
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = var.incoming_traffic
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = -1
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+
+
+# Creating a Launch Template for Autoscaling
+resource "aws_launch_template" "this" {
+  name          = "csye6225-launchtemplate"
+  image_id      = var.golden_ami_id
+  instance_type = var.instance_type
+
+  key_name = aws_key_pair.ec2.key_name
+
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.app_sg.id]
+
+  }
+
+  user_data = base64encode(templatefile("./user_data.tpl", {
+    application_port = var.application_port,
+    RDS_username     = var.RDS_username,
+    RDS_password     = var.RDS_password,
+    db_host          = aws_db_instance.this.address,
+    db_port          = aws_db_instance.this.port,
+    RDS_db_name      = var.RDS_db_name,
+    bucket_name      = aws_s3_bucket.this.bucket,
+    aws_region       = var.aws_region
+  }))
+  block_device_mappings {
+    device_name = "/dev/sdf"
+    ebs {
+      volume_size           = var.root_volume_size
+      volume_type           = var.root_volume_type
+      delete_on_termination = var.root_volume_delete_on_termination
+    }
+  }
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2.name
+  }
+
+  disable_api_termination = true
+
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "${var.ec2_name}-launch-template"
+    }
+  }
+}
+
+
+
+
+# Auto Scaling Group Definition
+resource "aws_autoscaling_group" "this" {
+  name = "csye6225-asg"
+
+  launch_template {
+    id      = aws_launch_template.this.id
+    version = "$Latest"
+  }
+
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  default_cooldown    = var.cooldown
+  vpc_zone_identifier = aws_subnet.public[*].id
+  force_delete        = true
+  # Auto Scaling Group Tags
+  tag {
+
+    key                 = "Name"
+    value               = "csye6225_asg"
+    propagate_at_launch = true
+
+
+  }
+  target_group_arns = [aws_lb_target_group.this.arn]
+  depends_on        = [aws_db_instance.this]
+
+
+}
+
+
+resource "aws_autoscaling_policy" "scale_up_policy" {
+  name                   = "scaleUpPolicy"
+  autoscaling_group_name = aws_autoscaling_group.this.name
+  scaling_adjustment     = 1
+  cooldown               = var.cooldown
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+}
+
+# CloudWatch Metric Alarm - CPU Utilization (Scale Up)
+resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
+  alarm_name          = "scale_up_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = var.scale_up_threshold
+
+  alarm_actions = [aws_autoscaling_policy.scale_up_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.this.name
+  }
+}
+
+resource "aws_autoscaling_policy" "scale_down_policy" {
+  name                   = "scaleDownPolicy"
+  autoscaling_group_name = aws_autoscaling_group.this.name
+  scaling_adjustment     = -1
+  cooldown               = var.cooldown
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+
+}
+
+
+# CloudWatch Metric Alarm - CPU Utilization (Scale Down)
+resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
+  alarm_name          = "scale_down_alarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = var.scale_down_threshold
+
+  alarm_actions = [aws_autoscaling_policy.scale_down_policy.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.this.name
+  }
+}
+
+resource "aws_lb" "this" {
+  name               = "csye6225-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.lb_sg.id]
+  subnets            = aws_subnet.public[*].id
+  enable_http2       = true
+
+  tags = {
+    Application = "webapp"
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this.arn
+
+
+  }
+}
+
+resource "aws_lb_target_group" "this" {
+  name        = "app-target-group"
+  port        = var.application_port
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.this.id
+  target_type = "instance"
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 10
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
 
