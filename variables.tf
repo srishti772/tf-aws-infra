@@ -184,11 +184,11 @@ variable "user_data_script" {
 }
 
 variable "scale_up_threshold" {
-  type = number
+  type    = number
   default = 5
 }
 
 variable "scale_down_threshold" {
-  type = number
+  type    = number
   default = 3
 }
