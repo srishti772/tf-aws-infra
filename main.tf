@@ -146,12 +146,7 @@ resource "aws_security_group" "db_sg" {
     security_groups = [aws_security_group.app_sg.id]
   }
 
-  ingress {
-    from_port       = 3306
-    to_port         = 3306
-    protocol        = "tcp"
-    security_groups = [aws_security_group.lambda_sg.id]
-  }
+
 
 }
 resource "aws_db_instance" "this" {
@@ -533,8 +528,8 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = var.runtime
-
-
+  timeout = 300
+ 
   environment {
     variables = {
       MAILGUN_API_KEY     = var.mailgun_api_key
@@ -577,6 +572,9 @@ resource "aws_sns_topic_subscription" "this" {
   topic_arn = aws_sns_topic.this.arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.this.arn
+
   
 }
+
+
 
