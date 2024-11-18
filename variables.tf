@@ -192,3 +192,20 @@ variable "scale_down_threshold" {
   type    = number
   default = 3
 }
+
+variable "runtime" {
+  description = "Lamba runtime environment"
+  type        = string
+  default     = "nodejs20.x"
+}
+
+variable "serverless" {
+  type        = string
+  description = "Lamba function filepath"
+}
+
+variable "mailgun_api_key" {
+  type        = string
+  description = "mailgun api key"
+}
+

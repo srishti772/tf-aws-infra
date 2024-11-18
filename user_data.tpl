@@ -24,7 +24,11 @@ echo "MYSQL_DATABASE_PROD=${RDS_db_name}" >> .env
 echo "STATSD_CLIENT=127.0.0.1" >> .env
 echo "STATSD_PORT=8125" >> .env
 echo "BUCKET_NAME=${bucket_name}" >> .env
-echo "BUCKET_REGION=${aws_region}" >> .env
+echo "AWS_REGION=${aws_region}" >> .env
+echo "LOG_LEVEL=info" >> .env
+echo "BASE_URL=${base_url}" >> .env
+echo "SNS_TOPIC_ARN=${sns_topic}" >> .env
+
 EOL
 
 
