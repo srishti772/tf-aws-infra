@@ -147,6 +147,7 @@ resource "aws_security_group" "db_sg" {
   }
 
 
+
 }
 resource "aws_db_instance" "this" {
   identifier = var.RDS_identifier
@@ -216,6 +217,8 @@ resource "aws_iam_role_policy_attachment" "s3Bucket_policy" {
   role       = aws_iam_role.ec2.name
   policy_arn = aws_iam_policy.s3Bucket_policy.arn
 }
+
+
 #Instance Profile to attach to EC2
 resource "aws_iam_instance_profile" "ec2" {
   name = "ec2"
@@ -283,25 +286,28 @@ resource "aws_security_group" "lb_sg" {
 
   # HTTP
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = var.incoming_traffic
+    ipv6_cidr_blocks = ["::/0"]
   }
 
   # HTTPS
   ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.incoming_traffic
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = var.incoming_traffic
+    ipv6_cidr_blocks = ["::/0"]
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = -1
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port        = 0
+    to_port          = 0
+    protocol         = -1
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
   }
 }
 
@@ -331,7 +337,9 @@ resource "aws_launch_template" "this" {
     db_port          = aws_db_instance.this.port,
     RDS_db_name      = var.RDS_db_name,
     bucket_name      = aws_s3_bucket.this.bucket,
-    aws_region       = var.aws_region
+    aws_region       = var.aws_region,
+    base_url         = var.subdomain_name,
+    sns_topic        = aws_sns_topic.this.arn
   }))
   block_device_mappings {
     device_name = "/dev/sdf"
@@ -487,4 +495,95 @@ resource "aws_lb_target_group" "this" {
     unhealthy_threshold = 3
   }
 }
+resource "aws_sns_topic" "this" {
+  name = "webapp-email-notification"
+}
+
+resource "aws_iam_policy" "sns_publish" {
+  name = "lambda_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "sns:Publish"
+        ]
+        Effect   = "Allow"
+        Resource = aws_sns_topic.this.arn
+      }
+    ]
+  })
+}
+#Allow EC2 to publish to SNS topic
+resource "aws_iam_role_policy_attachment" "snspublish_policy" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = aws_iam_policy.sns_publish.arn
+}
+
+
+resource "aws_lambda_function" "this" {
+  filename      = var.serverless
+  function_name = "serverless"
+  role          = aws_iam_role.lambda.arn
+  handler       = "index.handler"
+  runtime       = var.runtime
+  timeout       = 300
+
+  environment {
+    variables = {
+      MAILGUN_API_KEY     = var.mailgun_api_key
+      DOMAIN              = var.subdomain_name
+      MYSQL_HOST          = aws_db_instance.this.address
+      MYSQL_USER          = var.RDS_username
+      MYSQL_PASSWORD      = var.RDS_password
+      MYSQL_DATABASE_PROD = var.RDS_db_name
+      MYSQL_PORT          = aws_db_instance.this.port
+
+    }
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.sns_logging_policy_attachment]
+}
+
+
+resource "aws_iam_role" "lambda" {
+  name = "lambda"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "sns_logging_policy_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  role       = aws_iam_role.lambda.name
+}
+
+
+resource "aws_lambda_permission" "allow_sns_invoke" {
+  statement_id  = "AllowSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  principal     = "sns.amazonaws.com"
+  function_name = aws_lambda_function.this.function_name
+  source_arn    = aws_sns_topic.this.arn
+}
+
+resource "aws_sns_topic_subscription" "this" {
+  topic_arn = aws_sns_topic.this.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.this.arn
+
+
+}
+
+
 
