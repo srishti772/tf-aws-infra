@@ -528,8 +528,8 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = var.runtime
-  timeout = 300
- 
+  timeout       = 300
+
   environment {
     variables = {
       MAILGUN_API_KEY     = var.mailgun_api_key
@@ -582,7 +582,7 @@ resource "aws_sns_topic_subscription" "this" {
   protocol  = "lambda"
   endpoint  = aws_lambda_function.this.arn
 
-  
+
 }
 
 
