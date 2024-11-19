@@ -532,8 +532,8 @@ resource "aws_lambda_function" "this" {
 
   environment {
     variables = {
-      MAILGUN_API_KEY     = var.mailgun_api_key
-      DOMAIN              = var.subdomain_name
+      MAILGUN_API_KEY = var.mailgun_api_key
+      DOMAIN          = var.subdomain_name
 
     }
   }
