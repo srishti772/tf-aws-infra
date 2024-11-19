@@ -532,13 +532,8 @@ resource "aws_lambda_function" "this" {
 
   environment {
     variables = {
-      MAILGUN_API_KEY     = var.mailgun_api_key
-      DOMAIN              = var.subdomain_name
-      MYSQL_HOST          = aws_db_instance.this.address
-      MYSQL_USER          = var.RDS_username
-      MYSQL_PASSWORD      = var.RDS_password
-      MYSQL_DATABASE_PROD = var.RDS_db_name
-      MYSQL_PORT          = aws_db_instance.this.port
+      MAILGUN_API_KEY = var.mailgun_api_key
+      DOMAIN          = var.subdomain_name
 
     }
   }
