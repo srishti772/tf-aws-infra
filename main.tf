@@ -347,6 +347,8 @@ resource "aws_launch_template" "this" {
     aws_region       = var.aws_region,
     base_url         = var.subdomain_name,
     sns_topic        = aws_sns_topic.this.arn
+    secret_name     = aws_secretsmanager_secret.db_password.name
+
   }))
   block_device_mappings {
     device_name = "/dev/sda1"
@@ -618,32 +620,6 @@ resource "aws_kms_key" "ec2" {
 
       },
       {
-        Sid    = "Allow access for Key Administrators"
-        Effect = "Allow"
-        Principal = {
-          AWS : data.aws_caller_identity.current.arn
-        }
-        Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion",
-          "kms:RotateKeyOnDemand"
-        ]
-        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"
-
-      },
-      {
         Sid    = "Allow ASG to use  key"
         Effect = "Allow"
         Principal = {
@@ -703,30 +679,16 @@ resource "aws_kms_key" "rds" {
 
       },
       {
-        Sid    = "Allow access for Key Administrators"
+        Sid    = "Allow RDS to use the key"
         Effect = "Allow"
         Principal = {
-          AWS : data.aws_caller_identity.current.arn
+          Service = "rds.amazonaws.com"
         }
         Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion",
-          "kms:RotateKeyOnDemand"
+          "kms:Decrypt",
+          "kms:GenerateDataKey*"
         ]
         Resource = "arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:db/*"
-
       }
     ]
   })
@@ -753,32 +715,6 @@ resource "aws_kms_key" "s3" {
         Resource = "*"
       },
       {
-        Sid    = "Allow access for Key Administrators"
-        Effect = "Allow"
-        Principal = {
-          AWS : data.aws_caller_identity.current.arn
-        }
-        Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion",
-          "kms:RotateKeyOnDemand"
-        ]
-        Resource = "arn:aws:s3:::*"
-
-      },
-      {
         Sid    = "Allow EC2 to encrypt/decrypt objects"
         Effect = "Allow"
         Principal = {
@@ -791,7 +727,7 @@ resource "aws_kms_key" "s3" {
         ]
         Resource = "arn:aws:s3:::*"
       },
-      
+
     ]
   })
 }
@@ -817,56 +753,83 @@ resource "aws_kms_key" "secrets_manager" {
         Resource = "*"
       },
       {
-        Sid    = "Allow access for Key Administrators"
-        Effect = "Allow"
-        Principal = {
-          AWS : data.aws_caller_identity.current.arn
-        }
-        Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion",
-          "kms:RotateKeyOnDemand"
-        ]
-        Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret/*"
-
-      },
-      {
-        Sid    = "AllowEC2DecryptRDSPassword"
+        Sid    = "Allow EC2 to use the key"
         Effect = "Allow"
         Principal = {
           AWS : aws_iam_role.ec2.arn
         }
         Action = [
-          "kms:Decrypt"
+          "kms:Decrypt",
+          "kms:GenerateDataKey*"
+
         ]
-        Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret/*"
-      },
-      {
-        Sid    = "AllowLambdaDecryptMailgunAPIKey"
-        Effect = "Allow"
-        Principal = {
-          AWS = aws_iam_role.lambda.arn
-        }
-        Action   = "kms:Decrypt"
         Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret/*"
       }
     ]
   })
 }
 
+resource "aws_iam_policy" "KMSDecryptPolicyForEC2" {
+  name        = "KMSDecryptPolicyForEC2"
+  description = "Policy for  decrypt RDS and S3 bucket key"
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect : "Allow",
+        Action : ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+        Resource : aws_kms_key.s3.arn
+      },
+       {
+        Effect = "Allow"
+        Action = "secretsmanager:GetSecretValue"
+        Resource = [
+          aws_secretsmanager_secret.db_password.arn
+        ]
+      },
+       {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = aws_kms_key.secrets_manager.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "KMSDecryptPolicyForLambda" {
+  name        = "KMSDecryptPolicyForLambda"
+  description = "Policy to decrypt Mailgun API key"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "secretsmanager:GetSecretValue"
+        Resource = [
+          aws_secretsmanager_secret.mail_api_creds.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = aws_kms_key.secrets_manager.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "EC2KMSDecryptPolicy" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = aws_iam_policy.KMSDecryptPolicyForEC2.arn
+}
+
+
+resource "aws_iam_role_policy_attachment" "LambdaKMSDecryptPolicy" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.KMSDecryptPolicyForLambda.arn
+}
 
 resource "random_password" "db_password" {
   length           = 16
@@ -883,10 +846,7 @@ resource "aws_secretsmanager_secret" "db_password" {
 
 resource "aws_secretsmanager_secret_version" "db_password_version" {
   secret_id = aws_secretsmanager_secret.db_password.id
-  secret_string = jsonencode({
-    username = var.RDS_username
-    password = random_password.db_password.result
-  })
+  secret_string = random_password.db_password.result
 }
 
 resource "aws_secretsmanager_secret" "mail_api_creds" {
@@ -902,54 +862,7 @@ resource "aws_secretsmanager_secret_version" "mail_api_creds_version" {
 }
 
 
-resource "aws_iam_policy" "KMSDecryptPolicyForEC2" {
-  name        = "KMSDecryptPolicyForEC2"
-  description = "Policy for  decrypt RDS and S3 bucket key"
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect : "Allow",
-        Action : ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
-        Resource : aws_kms_key.s3.arn
-      }
-    ]
-  })
-}
-
-resource "aws_iam_policy" "KMSDecryptPolicyForLambda" {
-  name        = "KMSDecryptPolicyForLambda"
-  description = "Policy to decrypt Mailgun API key"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "kms:Decrypt"
-        Resource = aws_kms_key.secrets_manager.arn
-      },
-      {
-        Effect = "Allow"
-        Action = "secretsmanager:GetSecretValue"
-        Resource = [
-          aws_secretsmanager_secret.mail_api_creds.arn
-        ]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "EC2KMSDecryptPolicy" {
-  role       = aws_iam_role.ec2.name
-  policy_arn = aws_iam_policy.KMSDecryptPolicyForEC2.arn
-}
-
-resource "aws_iam_role_policy_attachment" "LambdaKMSDecryptPolicy" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = aws_iam_policy.KMSDecryptPolicyForLambda.arn
-}
 
 
 resource "aws_kms_alias" "ec2_encryption_alias" {

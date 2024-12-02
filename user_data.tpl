@@ -8,19 +8,25 @@ touch $LOG_FILE
 
 exec > $LOG_FILE 2>&1
 
-echo "Starting User Data Script"
-
-
+echo "Starting User Data Script v1"
 
 echo "Creating .env file"
 sudo -u csye6225 bash <<'EOL'
 
+echo "Secret name: ${secret_name} "
+echo "AWS Region: ${aws_region}"
+MYSQL_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${secret_name} --region ${aws_region} | jq -r '.SecretString')
+echo "AWS MYSQL_PASSWORD: $MYSQL_PASSWORD" 
+
 
 cd /opt/csye6225/webapp
+
+
+
 touch .env
 echo "PORT=${application_port}" >> .env
 echo "MYSQL_USER=${RDS_username}" >> .env
-echo "MYSQL_PASSWORD=${RDS_password}" >> .env
+echo "MYSQL_PASSWORD=$MYSQL_PASSWORD" >> .env
 echo "MYSQL_HOST=${db_host}" >> .env
 echo "MYSQL_PORT=${db_port}" >> .env
 echo "MYSQL_DATABASE_TEST=test_db" >> .env
