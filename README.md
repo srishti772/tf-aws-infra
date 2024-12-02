@@ -86,3 +86,71 @@ The following variables can be customized in `variables.tf`:
    ```bash
     terraform destroy
    ```
+## SSL
+1. **Purchase SSL from name cheap**
+2. **Genrate CSR** : On macOS (via Homebrew), instal openssl:
+
+```bash
+brew install openssl
+```
+
+Open a terminal/command prompt and navigate to the directory to store the CSR and private key files.
+Run the following OpenSSL command to generate a private key and a CSR. The demo.srishti-ahirwar.me domain will be used in the CSR.
+
+```bash
+openssl req -new -newkey rsa:2048 -nodes -keyout demo.srishti-ahirwar.me.key -out demo.srishti-ahirwar.me.csr
+```
+- **req -new** Tells OpenSSL to create a new certificate request.
+- **newkey rsa:2048**: Generates a new RSA private key with a size of 2048 bits.
+- **nodes**: Tells OpenSSL to not encrypt the private key (so that it can be used without a passphrase).
+- **keyout demo.srishti-ahirwar.me.key**: This specifies the filename where the private key will be saved.
+- **out demo.srishti-ahirwar.me.csr**: This specifies the filename where the CSR will be saved.
+
+Fill out the information when prompted: After running the command, OpenSSL will ask for information to generate the CSR. Enter the details as follows:
+
+- **Country Name (2 letter code)**: US or IN
+- **State or Province Name**: Massachusetts
+- **Locality Name**: Boston
+- **Organization Name**: (optional)
+- **Organizational Unit Name** : (optional)
+- **Common Name (domain name)** : demo.srishti-ahirwar.me (this is the most important part).
+- **Email Address** : Enter your email address.
+- **A challenge password: (optional)**
+
+Private Key and CSR: After filling in the required information, OpenSSL will generate two files:
+**demo.srishti-ahirwar.me.key**: This is the private key.
+**demo.srishti-ahirwar.me.csr**: This is the CSR that one has to submit to Namecheap.
+
+ 3. **Submit the CSR to Namecheap** : Log in to Namecheap account and navigate to the SSL Certificates section.
+- Open the demo.srishti-ahirwar.me.csr file generated before in plain text format.
+- Copy the entire content of the CSR, starting from -----BEGIN CERTIFICATE REQUEST----- to -----END CERTIFICATE REQUEST-----.
+- Paste it into the CSR input field during the SSL certificate generation process on Namecheap.
+- Use DNS validate the domail, submit.
+
+4. **Add CNAME DNS Record to Route53** : 
+-  Navigate to Namecheap dashboard -> SSL Certificate -> Details -> Click on Get CNAME Record link-> Click on arrow next to Edit Methods -> Get Records
+-  Add the CNAME record to route53 zone of demo account with TTL of 60 seconds.
+-  Navigate to Namecheap dashboard -> SSL Certificate -> Details -> Click on Get CNAME Record link-> Click on Edit Methods -> click on Save changes/Retry Alt DCV
+-  Check status on :  https://mxtoolbox.com/CnameLookup.aspx
+
+5. **Download Certificate files from namecheap** : 
+- Once certificate verified on namecheap, download and get the certificate bundle files: 
+   **Primary Certificate** (e.g., demo_srishti-ahirwar_me.crt)
+   **Intermediate Certificate(s)** (e.g., demo_srishti-ahirwar_me.ca-bundle)
+   **Root Certificate** (e.g., demo_srishti-ahirwar_me.p7b)
+
+
+6. **Import the files in ACM**
+```bash
+aws acm import-certificate \
+--certificate fileb:///Users/srishti77/Desktop/NEU/CSYE-6225-Cloud/Assignments/A09/demo_srishti-ahirwar_me.crt \
+--private-key fileb:///Users/srishti77/Desktop/NEU/CSYE-6225-Cloud/Assignments/A09/demo.srishti-ahirwar.me.key \
+--certificate-chain fileb:///Users/srishti77/Desktop/NEU/CSYE-6225-Cloud/Assignments/A09/demo_srishti-ahirwar_me.ca-bundle
+```
+
+Output:
+```bash
+{
+    "CertificateArn": "arn:aws:acm:us-east-1:664418960750:certificate/fda625bf-d3b8-4446-94cd-341500c739dd"
+}
+```
