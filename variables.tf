@@ -209,3 +209,19 @@ variable "mailgun_api_key" {
   description = "mailgun api key"
 }
 
+variable "SECRET_RDS" {
+  type        = string
+  description = "RDS password"
+}
+
+variable "SECRET_MAILGUN" {
+  type        = string
+  description = "Mailgun API key"
+}
+variable "certificate_arn" {
+  type        = string
+  description = "SSL Certificate ARN for load balancer"
+}
+
+
+

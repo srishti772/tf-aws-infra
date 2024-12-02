@@ -10,8 +10,12 @@ exec > $LOG_FILE 2>&1
 
 echo "Starting User Data Script"
 
+
+
 echo "Creating .env file"
 sudo -u csye6225 bash <<'EOL'
+
+
 cd /opt/csye6225/webapp
 touch .env
 echo "PORT=${application_port}" >> .env
