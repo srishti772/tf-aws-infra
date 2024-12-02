@@ -8,4 +8,3 @@ data "aws_route53_zone" "main" {
 }
 
 data "aws_caller_identity" "current" {}
-
