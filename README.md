@@ -125,19 +125,20 @@ Private Key and CSR: After filling in the required information, OpenSSL will gen
 - Open the demo.srishti-ahirwar.me.csr file generated before in plain text format.
 - Copy the entire content of the CSR, starting from -----BEGIN CERTIFICATE REQUEST----- to -----END CERTIFICATE REQUEST-----.
 - Paste it into the CSR input field during the SSL certificate generation process on Namecheap.
-- **Use DNS validate the domail, submit**
+- Use DNS validate the domail, submit.
 
 4. **Add CNAME DNS Record to Route53** : 
 -  Navigate to Namecheap dashboard -> SSL Certificate -> Details -> Click on Get CNAME Record link-> Click on arrow next to Edit Methods -> Get Records
--  **add the CNAME record to route53 zone of demo account with TTL of 60 seconds.**
+-  Add the CNAME record to route53 zone of demo account with TTL of 60 seconds.
 -  Navigate to Namecheap dashboard -> SSL Certificate -> Details -> Click on Get CNAME Record link-> Click on Edit Methods -> click on Save changes/Retry Alt DCV
 -  Check status on :  https://mxtoolbox.com/CnameLookup.aspx
 
 5. **Download Certificate files from namecheap** : 
 - Once certificate verified on namecheap, download and get the certificate bundle files: 
-  **demo_srishti-ahirwar_me.p7b** 
-  **demo_srishti-ahirwar_me.crt** 
-  **demo_srishti-ahirwar_me.ca_bundle**
+   **Primary Certificate** (e.g., demo_srishti-ahirwar_me.crt)
+   **Intermediate Certificate(s)** (e.g., demo_srishti-ahirwar_me.ca-bundle)
+   **Root Certificate** (e.g., demo_srishti-ahirwar_me.p7b)
+
 
 6. **Import the files in ACM**
 ```bash
