@@ -347,7 +347,7 @@ resource "aws_launch_template" "this" {
     aws_region       = var.aws_region,
     base_url         = var.subdomain_name,
     sns_topic        = aws_sns_topic.this.arn
-    secret_name     = aws_secretsmanager_secret.db_password.name
+    secret_name      = aws_secretsmanager_secret.db_password.name
 
   }))
   block_device_mappings {
@@ -781,14 +781,14 @@ resource "aws_iam_policy" "KMSDecryptPolicyForEC2" {
         Action : ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
         Resource : aws_kms_key.s3.arn
       },
-       {
+      {
         Effect = "Allow"
         Action = "secretsmanager:GetSecretValue"
         Resource = [
           aws_secretsmanager_secret.db_password.arn
         ]
       },
-       {
+      {
         Effect   = "Allow"
         Action   = "kms:Decrypt"
         Resource = aws_kms_key.secrets_manager.arn
@@ -845,7 +845,7 @@ resource "aws_secretsmanager_secret" "db_password" {
 }
 
 resource "aws_secretsmanager_secret_version" "db_password_version" {
-  secret_id = aws_secretsmanager_secret.db_password.id
+  secret_id     = aws_secretsmanager_secret.db_password.id
   secret_string = random_password.db_password.result
 }
 
