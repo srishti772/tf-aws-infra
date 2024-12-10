@@ -1,3 +1,6 @@
+
+![alt text](https://i.imgur.com/jKm4LE8.png)
+
 # Terraform Setup
 
 This repository contains Terraform configurations for creating a Virtual Private Cloud (VPC) on AWS. The setup includes public and private subnets, an Internet Gateway, route tables, EC2 instances, Security Groups and Key pairs.
